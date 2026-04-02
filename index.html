@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IoT AI Voice Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #121212; color: white; text-align: center; padding: 20px; }
+        .container { max-width: 600px; margin: auto; background: #1e1e1e; padding: 30px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        .sensor-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px; }
+        .data-box { background: #2d2d2d; padding: 15px; border-radius: 10px; border-bottom: 4px solid #3498db; }
+        .label { font-size: 14px; color: #888; text-transform: uppercase; }
+        .value { font-size: 24px; font-weight: bold; margin-top: 5px; }
+        #status { margin-bottom: 20px; font-weight: bold; color: #e74c3c; }
+        button { padding: 12px 25px; font-size: 16px; cursor: pointer; border-radius: 50px; border: none; background: #00b894; color: white; font-weight: bold; transition: 0.3s; }
+        button:hover { background: #55efc4; transform: scale(1.05); }
+        .alert { border-bottom: 4px solid #e17055 !important; color: #ff7675; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Office IoT Monitor</h1>
+    <div id="status">MQTT Status: Disconnected</div>
+    <button id="startBtn" onclick="connectMQTT()">Connect & Enable Voice</button>
+
+    <div class="sensor-grid">
+        <div class="data-box"><div class="label">Temperature</div><div class="value" id="t-val">--°C</div></div>
+        <div class="data-box"><div class="label">Humidity</div><div class="value" id="h-val">--%</div></div>
+        <div class="data-box"><div class="label">Voltage</div><div class="value" id="v-val">--V</div></div>
+        <div class="data-box"><div class="label">Current</div><div class="value" id="a-val">--A</div></div>
+        <div class="data-box"><div class="label">Object Count</div><div class="value" id="c-val">0</div></div>
+        <div class="data-box" id="vib-box"><div class="label">Vibration</div><div class="value" id="vib-val">Stable</div></div>
+    </div>
+</div>
+
+<script>
+    // CONFIGURATION (From your HiveMQ Screenshot)
+    const MQTT_HOST = "eb31be572e1a46459ea542396cf9aca8.s1.eu.hivemq.cloud";
+    const MQTT_PORT = 8884; // WebSocket port for Cloud
+    const MQTT_USER = "healthy"; 
+    const MQTT_PASS = "HelTHY2K"; // <--- Put your 'healthy' user password here
+
+    const client = new Paho.MQTT.Client("wss://" + MQTT_HOST + ":" + MQTT_PORT + "/mqtt", "web_client_" + Math.random());
+
+    function connectMQTT() {
+        document.getElementById("status").innerText = "Connecting...";
+        client.connect({
+            userName: MQTT_USER,
+            password: MQTT_PASS,
+            useSSL: true,
+            onSuccess: () => {
+                document.getElementById("status").innerText = "Status: Connected ✅";
+                document.getElementById("status").style.color = "#00b894";
+                document.getElementById("startBtn").style.display = "none";
+                client.subscribe("office/sensors");
+                announce("Voice assistant activated. Monitoring starting now.");
+            },
+            onFailure: (e) => { 
+                document.getElementById("status").innerText = "Connection Failed!";
+                console.log(e);
+            }
+        });
+    }
+
+    client.onMessageArrived = (message) => {
+        const payload = message.payloadString;
+        console.log("Data Received: " + payload);
+        updateUI(payload);
+    };
+
+    function updateUI(str) {
+        // Expected Format: Cnt:5,V:12.5,A:0.5,T:25.0,H:50.0,P:1013
+        const dataArr = str.split(',');
+        
+        dataArr.forEach(item => {
+            const [key, val] = item.split(':');
+            if(key === "Cnt") document.getElementById("c-val").innerText = val;
+            if(key === "V")   document.getElementById("v-val").innerText = val + "V";
+            if(key === "A")   document.getElementById("a-val").innerText = val + "A";
+            if(key === "T")   document.getElementById("t-val").innerText = val + "°C";
+            if(key === "H")   document.getElementById("h-val").innerText = val + "%";
+        });
+
+        // AI VOICE ALERT LOGIC
+        if (str.toUpperCase().includes("VIBRATION") || str.includes("ALARM")) {
+            document.getElementById("vib-val").innerText = "DETECTED!";
+            document.getElementById("vib-box").classList.add("alert");
+            announce("Attention! Vibration detected in the office area.");
+        } else {
+            document.getElementById("vib-val").innerText = "Stable";
+            document.getElementById("vib-box").classList.remove("alert");
+        }
+    }
+
+    function announce(text) {
+        const speech = new SpeechSynthesisUtterance(text);
+        speech.rate = 1.0;
+        window.speechSynthesis.speak(speech);
+    }
+</script>
+
+</body>
+</html>
